@@ -2,7 +2,7 @@ name: Weekly Build
 
 on:
   schedule:
-    - cron: "30 22 * * 1" # Runs daily at 22:30
+    - cron: "30 22 * * *"
   push:
     branches:
       - main
@@ -40,7 +40,6 @@ jobs:
           pip install -r requirements.txt
 
       - name: Auto-Update Version
-        # This ensures every build has a unique version (e.g., 0.1.7, 0.1.8)
         run: |
           sed -i "s/version = \".*\"/version = \"0.1.${{ github.run_number }}\"/" pyproject.toml
 
@@ -54,8 +53,9 @@ jobs:
         run: |
           python -m twine upload \
             --verbose \
-            --repository-url "https://pypi.pkg.github.com/${{ github.repository }}" \
-                  dist/*
+            --repository-url https://pypi.pkg.github.com/${{ github.repository_owner }} \
+            dist/*
+
       - name: Sync Changes
         if: github.event_name != 'pull_request'
         run: |
