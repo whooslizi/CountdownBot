@@ -10,15 +10,17 @@ from dotenv import load_dotenv
 # Load secrets
 load_dotenv()
 TOKEN = os.getenv('DISCORD_TOKEN')
-CHANNEL_ID = int(os.getenv('CHANNEL_ID'))
-USER_ID = int(os.getenv('USER_ID'))
+# Ensure IDs are handled as integers
+CHANNEL_ID = int(os.getenv('CHANNEL_ID')) if os.getenv('CHANNEL_ID') else None
+USER_ID = int(os.getenv('USER_ID')) if os.getenv('USER_ID') else None
 
 # Bot Setup
 intents = discord.Intents.default()
 intents.message_content = True
 bot = commands.Bot(command_prefix='?', intents=intents)
 
-DATA_FILE = "data.json"
+BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+DATA_FILE = os.path.join(BASE_DIR, "data.json")
 
 QUOTES = [
     "Success is not final, failure is not fatal: it is the courage to continue that counts.",
@@ -36,12 +38,15 @@ QUOTES = [
 def load_data():
     if os.path.exists(DATA_FILE):
         with open(DATA_FILE, "r") as f:
-            return json.load(f)
+            try:
+                return json.load(f)
+            except json.JSONDecodeError:
+                return {}
     return {}
 
 def save_data(data):
     with open(DATA_FILE, "w") as f:
-        json.dump(data, f)
+        json.dump(data, f, indent=4)
 
 @bot.event
 async def on_ready():
@@ -49,25 +54,21 @@ async def on_ready():
     data = load_data()
     
     if not data:
-        channel = bot.get_channel(CHANNEL_ID)
-        if channel:
-            await channel.send(f"<@{USER_ID}> Setup required. Please use: ?set_test YYYY-MM-DD HH:MM Timezone")
+        if CHANNEL_ID:
+            channel = bot.get_channel(CHANNEL_ID)
+            if channel:
+                await channel.send(f"<@{USER_ID}> Setup required. Use: ?set_test YYYY-MM-DD HH:MM Timezone")
     else:
         if not announce_days_left.is_running():
             announce_days_left.start()
 
 @bot.command()
 async def set_test(ctx, date_str: str, time_str: str, tz_str: str):
-    """Usage: ?set_test 2026-06-15 09:00 Asia/Ho_Chi_Minh"""
     try:
-        # Validate format and timezone
         test_date = f"{date_str} {time_str}"
         pytz.timezone(tz_str)
         
-        data = {
-            "test_date": test_date,
-            "timezone": tz_str
-        }
+        data = {"test_date": test_date, "timezone": tz_str}
         save_data(data)
         
         await ctx.send(f"Success. Test date set to {test_date} ({tz_str}). Daily countdown initialized.")
@@ -81,7 +82,7 @@ async def set_test(ctx, date_str: str, time_str: str, tz_str: str):
 @tasks.loop(hours=24)
 async def announce_days_left():
     data = load_data()
-    if not data:
+    if not data or not CHANNEL_ID:
         return
 
     channel = bot.get_channel(CHANNEL_ID)
@@ -105,4 +106,12 @@ async def announce_days_left():
     else:
         await channel.send(f"<@{USER_ID}> {days_left} days left until your test. {quote}")
 
-bot.run(TOKEN)
+def start():
+    """Package entry point"""
+    if TOKEN:
+        bot.run(TOKEN)
+    else:
+        print("Error: DISCORD_TOKEN not found.")
+
+if __name__ == "__main__":
+    start()
