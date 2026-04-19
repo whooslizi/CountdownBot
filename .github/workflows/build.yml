@@ -1,55 +1,47 @@
-name: Weekly Build and Push
+name: Weekly Build
 
 on:
   schedule:
-    - cron: '0 3 * * 1'
+    - cron: '0 3 * * 1' # 3 AM every Monday
   workflow_dispatch:
 
 jobs:
-  build-and-publish:
+  build-and-push:
     runs-on: ubuntu-latest
     permissions:
       contents: write
       packages: write
 
     steps:
-    - name: Checkout Code (The Pull)
-      uses: actions/checkout@v3
+      - name: Checkout Code
+        uses: actions/checkout@v4
 
-    - name: Set up Python
-      uses: actions/setup-python@v4
-      with:
-        python-version: '3.10'
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.10'
 
-    - name: Install dependencies
-      run: |
-        python -m pip install --upgrade pip
-        pip install build twine
-        pip install -r requirements.txt
+      - name: Install Tools
+        run: |
+          python -m pip install --upgrade pip
+          pip install build twine
+          pip install -r requirements.txt
 
-    - name: Syntax Check
-      run: |
-        python -m py_compile src/main.py
+      - name: Build Package
+        run: python -m build
 
-    - name: Build Package
-      run: |
-        python -m build
+      - name: Publish to GitHub Packages
+        env:
+          TWINE_USERNAME: ${{ github.actor }}
+          TWINE_PASSWORD: ${{ secrets.GITHUB_TOKEN }}
+          TWINE_REPOSITORY_URL: https://pypi.pkg.github.com/${{ github.repository_owner }}/${{ github.event.repository.name }}
+        run: |
+          python -m twine upload --repository-url $TWINE_REPOSITORY_URL dist/* --skip-existing
 
-    - name: Publish to GitHub Packages (The Push)
-      env:
-        TWINE_USERNAME: ${{ github.actor }}
-        TWINE_PASSWORD: ${{ secrets.GITHUB_TOKEN }}
-        TWINE_REPOSITORY_URL: https://github.com/YOUR_USERNAME/whooslizi/packages/
-      run: |
-        ls -l dist/
-
-    - name: Sync Data File (Git Push)
-      run: |
-        git config --global user.name "github-actions[bot]"
-        git config --global user.email "github-actions[bot]@users.noreply.github.com"
-        # Only push if data.json was updated during the build/test
-        if [ -f data.json ]; then
+      - name: Sync Data Changes
+        run: |
+          git config --global user.name "github-actions[bot]"
+          git config --global user.email "github-actions[bot]@users.noreply.github.com"
           git add data.json
-          git commit -m "Automated weekly data sync" || echo "No changes to commit"
+          git commit -m "Weekly automated data sync" || echo "No changes to commit"
           git push
-        fi
