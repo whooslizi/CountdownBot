@@ -2,7 +2,7 @@ name: Weekly Build
 
 on:
   schedule:
-    - cron: "30 22 * * 1"
+    - cron: "30 22 * * 1" # Runs daily at 22:30
   push:
     branches:
       - main
@@ -17,7 +17,7 @@ concurrency:
 
 jobs:
   build-and-push:
-    name: Build and Publish Package
+    name: Build and Publish
     runs-on: ubuntu-latest
     permissions:
       contents: write
@@ -40,28 +40,33 @@ jobs:
           pip install -r requirements.txt
 
       - name: Auto-Update Version
+        # This ensures every build has a unique version (e.g., 0.1.7, 0.1.8)
         run: |
-          sed -i "s/version = \".*\"/version = \"1.0.${{ github.run_number }}\"/" pyproject.toml
+          sed -i "s/version = \".*\"/version = \"0.1.${{ github.run_number }}\"/" pyproject.toml
 
       - name: Build Package
         run: python -m build
 
       - name: Publish to GitHub Packages
+        shell: bash
         env:
           TWINE_USERNAME: ${{ github.actor }}
           TWINE_PASSWORD: ${{ secrets.GITHUB_TOKEN }}
-          TWINE_REPOSITORY_URL: https://pypi.pkg.github.com/${{ github.repository_owner }}/${{ github.event.repository.name }}
         run: |
-          # We remove --skip-existing because GitHub doesn't support it, 
-          # but our unique versioning above fixes the conflict issue.
-          python -m twine upload --repository-url $TWINE_REPOSITORY_URL dist/*
+          # The fix for 404: Force lowercase on the owner and repo name
+          OWNER_LC=$(echo "${{ github.repository_owner }}" | tr '[:upper:]' '[:lower:]')
+          REPO_LC=$(echo "${{ github.event.repository.name }}" | tr '[:upper:]' '[:lower:]')
+          
+          # Uploading to the specific repository registry
+          python -m twine upload \
+            --repository-url "https://pypi.pkg.github.com/${OWNER_LC}/${REPO_LC}/" \
+            dist/*
 
       - name: Sync Changes
-        # This pushes the updated pyproject.toml and data.json back to your repo
         if: github.event_name != 'pull_request'
         run: |
           git config --global user.name "github-actions[bot]"
           git config --global user.email "github-actions[bot]@users.noreply.github.com"
           git add data.json pyproject.toml
-          git commit -m "Automated build v1.0.${{ github.run_number }}" || echo "No changes to commit"
+          git commit -m "Automated build v0.1.${{ github.run_number }}" || echo "No changes to commit"
           git push
