@@ -1,4 +1,4 @@
-name: Weekly Build Check
+name: Weekly Build and Push
 
 on:
   schedule:
@@ -6,11 +6,14 @@ on:
   workflow_dispatch:
 
 jobs:
-  build:
+  build-and-publish:
     runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      packages: write
 
     steps:
-    - name: Checkout code
+    - name: Checkout Code (The Pull)
       uses: actions/checkout@v3
 
     - name: Set up Python
@@ -21,8 +24,32 @@ jobs:
     - name: Install dependencies
       run: |
         python -m pip install --upgrade pip
+        pip install build twine
         pip install -r requirements.txt
 
     - name: Syntax Check
       run: |
         python -m py_compile src/main.py
+
+    - name: Build Package
+      run: |
+        python -m build
+
+    - name: Publish to GitHub Packages (The Push)
+      env:
+        TWINE_USERNAME: ${{ github.actor }}
+        TWINE_PASSWORD: ${{ secrets.GITHUB_TOKEN }}
+        TWINE_REPOSITORY_URL: https://github.com/YOUR_USERNAME/whooslizi/packages/
+      run: |
+        ls -l dist/
+
+    - name: Sync Data File (Git Push)
+      run: |
+        git config --global user.name "github-actions[bot]"
+        git config --global user.email "github-actions[bot]@users.noreply.github.com"
+        # Only push if data.json was updated during the build/test
+        if [ -f data.json ]; then
+          git add data.json
+          git commit -m "Automated weekly data sync" || echo "No changes to commit"
+          git push
+        fi
