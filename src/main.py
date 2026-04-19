@@ -2,65 +2,107 @@ import discord
 from discord.ext import commands, tasks
 import datetime
 import pytz
+import os
+import json
+import random
+from dotenv import load_dotenv
 
-# Define your intents
+# Load secrets
+load_dotenv()
+TOKEN = os.getenv('DISCORD_TOKEN')
+CHANNEL_ID = int(os.getenv('CHANNEL_ID'))
+USER_ID = int(os.getenv('USER_ID'))
+
+# Bot Setup
 intents = discord.Intents.default()
-
-BOT_ID = "YOUR_BOT_ID"
-YOUR_CHANNEL_ID = "YOUR_CHANNEL_ID"
+intents.message_content = True
 bot = commands.Bot(command_prefix='?', intents=intents)
 
-timezone = pytz.timezone('Asia/Ho_Chi_Minh')
+DATA_FILE = "data.json"
 
-# Dates for your tests (replace with your actual test dates)
-speaking_test_date = timezone.localize(datetime.datetime(2024, 4, 19, 16, 45, 0))  # April 19th, 2024 at 4:45 PM
-lrw_test_date = timezone.localize(datetime.datetime(2024, 4, 20, 9, 0, 0))  # April 20th, 2024 at 9:00 AM
+QUOTES = [
+    "Success is not final, failure is not fatal: it is the courage to continue that counts.",
+    "Believe you can and you're halfway there.",
+    "The only way to do great work is to love what you do.",
+    "It always seems impossible until it's done.",
+    "Don't watch the clock; do what it does. Keep going.",
+    "The future depends on what you do today.",
+    "Hardships often prepare ordinary people for an extraordinary destiny.",
+    "Action is the foundational key to all success.",
+    "Your talent determines what you can do. Your motivation determines how much you are willing to do.",
+    "Small steps in the right direction can turn out to be the biggest steps of your life."
+]
 
-def get_current_time():
-    now = datetime.datetime.now(timezone)
-    current_time = now.strftime('%Y-%m-%d %H:%M:%S %Z%z')
-    return current_time
+def load_data():
+    if os.path.exists(DATA_FILE):
+        with open(DATA_FILE, "r") as f:
+            return json.load(f)
+    return {}
 
-def get_days_left(test_date):
-    now = datetime.datetime.now(timezone)
-    delta = test_date - now
-    return delta.days
-
-def format_message(days_left, test_name, user_id):
-    mention = f"<@{user_id}>"
-    if days_left == 0:
-        return f"{mention} Today is your {test_name} test day!"
-    elif days_left == 1:
-        return f"{mention} Only 1 day left until your {test_name} test!"
-    else:
-        return f"{mention} Only {days_left} days left until your {test_name} test!"
-
-@bot.command()
-async def speaking(ctx):
-    current_time = get_current_time()
-    await ctx.send(f"The current time for your speaking test is: {current_time}")
-
-@bot.command()
-async def lrw(ctx):
-    current_time = get_current_time()
-    await ctx.send(f"The current time for your listening, reading, writing test is: {current_time}")
-
-@tasks.loop(hours=24)
-async def announce_days_left():
-    speaking_days_left = get_days_left(speaking_test_date)
-    lrw_days_left = get_days_left(lrw_test_date)
-
-    channel = bot.get_channel(int(YOUR_CHANNEL_ID))
-
-    # Replace USER_ID with the actual user ID you want to tag
-    user_id = "USER_ID"
-
-    await channel.send(format_message(speaking_days_left, "Speaking", user_id))
-    await channel.send(format_message(lrw_days_left, "Listening, Reading, Writing", user_id))
+def save_data(data):
+    with open(DATA_FILE, "w") as f:
+        json.dump(data, f)
 
 @bot.event
 async def on_ready():
-    print(f"I am inside {bot.user.name}!")
-    announce_days_left.start()
+    print(f"Logged in as {bot.user.name}")
+    data = load_data()
+    
+    if not data:
+        channel = bot.get_channel(CHANNEL_ID)
+        if channel:
+            await channel.send(f"<@{USER_ID}> Setup required. Please use: ?set_test YYYY-MM-DD HH:MM Timezone")
+    else:
+        if not announce_days_left.is_running():
+            announce_days_left.start()
 
-bot.run('YOUR_BOT_ID')
+@bot.command()
+async def set_test(ctx, date_str: str, time_str: str, tz_str: str):
+    """Usage: ?set_test 2026-06-15 09:00 Asia/Ho_Chi_Minh"""
+    try:
+        # Validate format and timezone
+        test_date = f"{date_str} {time_str}"
+        pytz.timezone(tz_str)
+        
+        data = {
+            "test_date": test_date,
+            "timezone": tz_str
+        }
+        save_data(data)
+        
+        await ctx.send(f"Success. Test date set to {test_date} ({tz_str}). Daily countdown initialized.")
+        
+        if not announce_days_left.is_running():
+            announce_days_left.start()
+            
+    except Exception as e:
+        await ctx.send(f"Error: {e}. Use format: YYYY-MM-DD HH:MM Region/City")
+
+@tasks.loop(hours=24)
+async def announce_days_left():
+    data = load_data()
+    if not data:
+        return
+
+    channel = bot.get_channel(CHANNEL_ID)
+    if not channel:
+        return
+
+    tz = pytz.timezone(data['timezone'])
+    test_dt = tz.localize(datetime.datetime.strptime(data['test_date'], '%Y-%m-%d %H:%M'))
+    
+    now = datetime.datetime.now(tz)
+    delta = test_dt - now
+    days_left = delta.days + 1
+    
+    quote = random.choice(QUOTES)
+
+    if days_left < 0:
+        await channel.send(f"<@{USER_ID}> The test date has passed. {quote}")
+        announce_days_left.stop()
+    elif days_left == 0:
+        await channel.send(f"<@{USER_ID}> Today is the day. {quote}")
+    else:
+        await channel.send(f"<@{USER_ID}> {days_left} days left until your test. {quote}")
+
+bot.run(TOKEN)
