@@ -1,0 +1,16 @@
+[build-system]
+requires = ["setuptools", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "discord-countdown-bot"
+version = "0.1.0"
+description = "Discord Bot"
+dependencies = [
+    "discord.py",
+    "python-dotenv",
+    "pytz",
+]
+
+[project.scripts]
+run-bot = "src.main:bot.run"
