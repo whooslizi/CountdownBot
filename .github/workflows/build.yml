@@ -36,8 +36,7 @@ jobs:
           TWINE_PASSWORD: ${{ secrets.GITHUB_TOKEN }}
           TWINE_REPOSITORY_URL: https://pypi.pkg.github.com/${{ github.repository_owner }}/${{ github.event.repository.name }}
         run: |
-          python -m twine upload --repository-url $TWINE_REPOSITORY_URL dist/* --skip-existing
-
+          python -m twine upload --repository-url $TWINE_REPOSITORY_URL dist/*
       - name: Sync Data Changes
         run: |
           git config --global user.name "github-actions[bot]"
