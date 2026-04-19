@@ -48,20 +48,14 @@ jobs:
         run: python -m build
 
       - name: Publish to GitHub Packages
-        shell: bash
         env:
           TWINE_USERNAME: ${{ github.actor }}
           TWINE_PASSWORD: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          # The fix for 404: Force lowercase on the owner and repo name
-          OWNER_LC=$(echo "${{ github.repository_owner }}" | tr '[:upper:]' '[:lower:]')
-          REPO_LC=$(echo "${{ github.event.repository.name }}" | tr '[:upper:]' '[:lower:]')
-          
-          # Uploading to the specific repository registry
           python -m twine upload \
-            --repository-url "https://pypi.pkg.github.com/${OWNER_LC}/${REPO_LC}/" \
-            dist/*
-
+            --verbose \
+            --repository-url "https://pypi.pkg.github.com/${{ github.repository }}" \
+                  dist/*
       - name: Sync Changes
         if: github.event_name != 'pull_request'
         run: |
